@@ -1,0 +1,108 @@
+# =====================================================
+# NeuroTune / OxHack26 .gitignore
+# =====================================================
+
+# ---------- EEG & participant data (PRIVACY: never commit) ----------
+# Keep the folder structure via .gitkeep, ignore everything inside.
+data/raw_eeg/*
+!data/raw_eeg/.gitkeep
+data/processed_eeg/*
+!data/processed_eeg/.gitkeep
+data/external/*
+!data/external/.gitkeep
+data/participant_labels.csv
+
+# Common EEG file formats (anywhere in the repo)
+*.edf
+*.bdf
+*.fif
+*.fif.gz
+*.set
+*.fdt
+*.xdf
+*.vhdr
+*.vmrk
+*.eeg
+*.npz
+*.npy
+*.h5
+*.hdf5
+
+# Downloaded datasets (e.g. the Zenodo record) - link to it in the README instead
+*.zip
+*.tar
+*.tar.gz
+*.7z
+
+# ---------- Audio (copyright + file size) ----------
+*.mp3
+*.wav
+*.m4a
+*.flac
+*.ogg
+*.aac
+# To commit a small, licence-cleared demo clip, force-add it:
+#   git add -f assets/demo_clip.mp3
+
+# ---------- Trained models ----------
+# Personalised models are derived from participant data.
+*.joblib
+*.pkl
+*.pickle
+*.onnx
+
+# ---------- Secrets ----------
+.env
+.env.*
+!.env.example
+*.pem
+*.key
+secrets.json
+credentials.json
+
+# ---------- Python ----------
+__pycache__/
+*.py[cod]
+*$py.class
+.venv/
+venv/
+env/
+*.egg-info/
+build/
+dist/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.ipynb_checkpoints/
+.coverage
+htmlcov/
+
+# ---------- Chrome extension / Node ----------
+node_modules/
+npm-debug.log*
+yarn-error.log
+*.crx
+# (*.pem signing key is already ignored above - never lose or leak it)
+
+# ---------- Logs & temp ----------
+*.log
+logs/
+tmp/
+temp/
+*.tmp
+
+# ---------- Editors ----------
+.vscode/*
+!.vscode/extensions.json
+!.vscode/settings.json
+.idea/
+*.swp
+*.swo
+*~
+
+# ---------- OS ----------
+.DS_Store
+Thumbs.db
+desktop.ini
+
+Onedrive
