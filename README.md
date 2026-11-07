@@ -13,4 +13,4 @@ NeuroTune reads your EEG whule listening to an audiobook.
 
 ## Licence
  
-_TODO: choose a licence (e.g. MIT) and add a LICENSE file, or state "all rights reserved" if undecided._
+MIT
