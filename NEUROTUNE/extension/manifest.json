@@ -1,0 +1,21 @@
+{
+  "manifest_version": 3,
+  "name": "NeuroTune",
+  "version": "1.0",
+  "description": "An adaptive audiobook powered by EEG.",
+  "permissions": [
+    "sidePanel"
+  ],
+  "host_permissions": [
+    "http://127.0.0.1:8000/*"
+  ],
+  "background": {
+    "service_worker": "background.js"
+  },
+  "action": {
+    "default_title": "Open NeuroTune"
+  },
+  "side_panel": {
+    "default_path": "sidepanel.html"
+  }
+}
