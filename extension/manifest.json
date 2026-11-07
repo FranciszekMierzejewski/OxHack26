@@ -2,12 +2,11 @@
   "manifest_version": 3,
   "name": "NeuroTune",
   "version": "1.0",
-  "description": "An adaptive audiobook powered by EEG.",
+  "description": "Control the playback speed of audio and video on the active webpage.",
   "permissions": [
-    "sidePanel"
-  ],
-  "host_permissions": [
-    "http://127.0.0.1:8000/*"
+    "sidePanel",
+    "activeTab",
+    "scripting"
   ],
   "background": {
     "service_worker": "background.js"

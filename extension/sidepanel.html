@@ -11,35 +11,27 @@
       <header>
         <p class="eyebrow">Listen at your own pace</p>
         <h1>NeuroTune</h1>
-        <p class="intro">Your audiobook adapts to your attention.</p>
+        <p class="intro">Control audio and video playing in your active tab.</p>
       </header>
 
-      <section aria-labelledby="importHeading">
-        <h2 id="importHeading">Import your audiobook</h2>
-        <label class="file-picker" for="audioFile">Choose an audio file</label>
-        <input type="file" id="audioFile" accept="audio/*">
-        <p id="fileStatus" class="helper" aria-live="polite">No audiobook selected</p>
-        <audio id="audiobook" controls aria-label="Audiobook playback"></audio>
+      <section aria-labelledby="mediaHeading">
+        <h2 id="mediaHeading">Webpage media</h2>
+        <p id="mediaStatus" class="status" aria-live="polite">
+          Checking the active tab
+        </p>
       </section>
 
       <section aria-labelledby="speedHeading">
         <h2 id="speedHeading">Playback speed</h2>
-        <label for="speedSelect">Choose a speed</label>
+        <label for="speedSelect">Set speed for webpage media</label>
         <select id="speedSelect">
           <option value="0.9">0.9x</option>
           <option value="0.95">0.95x</option>
           <option value="1" selected>1.0x</option>
           <option value="1.05">1.05x</option>
         </select>
-      </section>
-
-      <section aria-labelledby="attentionHeading">
-        <h2 id="attentionHeading">Attention monitoring</h2>
-        <p id="attentionStatus" class="status" aria-live="polite">
-          Waiting for EEG connection
-        </p>
         <p id="speedStatus" class="helper" aria-live="polite">
-          Normal listening speed
+          The selected speed will apply to detected and newly added media.
         </p>
       </section>
     </main>
