@@ -1,4 +1,4 @@
-<input> type = "file" accept = "audio/*" id = "audioFile"
+<input type = "file" accept = "audio/*" id = "audioFile">
 <audio id="audiobook" controls></audio>
 <label for="speedselect">Playback speed:</label>
 <select id="speedselect">
