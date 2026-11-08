@@ -1,0 +1,7 @@
+fastapi
+uvicorn
+numpy
+scipy
+h5py
+pandas
+pylsl

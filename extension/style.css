@@ -97,3 +97,44 @@ audio {
   color: #39335f;
   font-size: 0.9rem;
 }
+
+meter {
+  display: block;
+  width: 100%;
+  height: 12px;
+  margin-top: 10px;
+}
+
+.toggle {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-top: 14px;
+}
+
+.toggle input {
+  width: auto;
+  margin: 0;
+}
+
+button {
+  margin-top: 12px;
+  padding: 8px 14px;
+  border: 1px solid #5747a6;
+  border-radius: 8px;
+  background: #fff;
+  color: #5747a6;
+  font: inherit;
+  cursor: pointer;
+}
+
+button:disabled {
+  border-color: #cbc6df;
+  color: #8f8aa5;
+  cursor: default;
+}
+
+button:focus-visible {
+  outline: 2px solid #5747a6;
+  outline-offset: 2px;
+}

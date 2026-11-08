@@ -24,7 +24,7 @@
 
       <section aria-labelledby="speedHeading">
         <h2 id="speedHeading">Playback speed</h2>
-        <label for="speedSelect">Choose a speed</label>
+        <label for="speedSelect">Your preferred speed</label>
         <input
           type="range"
           id="speedSelect"
@@ -33,7 +33,7 @@
           step="0.25"
           value="1.0"
         >
-        <span id="speedValue"1.0x<\span>
+        <span id="speedValue">1.0x</span>
       </section>
 
       <section aria-labelledby="attentionHeading">
@@ -41,9 +41,15 @@
         <p id="attentionStatus" class="status" aria-live="polite">
           Waiting for EEG connection
         </p>
+        <meter id="attentionMeter" min="0" max="1" low="0.3" high="0.42" optimum="1" value="0" aria-label="Current attention" hidden></meter>
         <p id="speedStatus" class="helper" aria-live="polite">
           Normal listening speed
         </p>
+        <label class="toggle">
+          <input type="checkbox" id="adaptiveToggle" checked>
+          Slow down when my attention drops
+        </label>
+        <button type="button" id="recalibrateButton" disabled>Recalibrate</button>
       </section>
     </main>
     <script src="audio_player.js"></script>
