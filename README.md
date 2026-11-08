@@ -2,7 +2,7 @@
 
 **An audiobook that adapts to your attention - Built for Oxford University's Neurotech Hackathon 2026**
 
-NeuroTune reads your EEG whule listening to an audiobook. 
+NeuroTune reads your EEG while listening to an audiobook. 
 
 **Collaborators**:
 - Kiran Kacha
