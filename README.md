@@ -61,7 +61,7 @@ python analysis/check_lsl.py
 
 The offline preprocessing pipeline is for dataset analysis and is not used by the live attention service.
 
-**Collaborators**:
+## Collaborators
 - Kiran Kacha
 - Georgia Rushton
 - Gamz Duman
