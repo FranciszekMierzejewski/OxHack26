@@ -1,25 +1,26 @@
 from pathlib import Path
+from typing import Any
 
 import h5py
 import numpy as np
 import pandas as pd
 
-RAW_PATH = Path("data/raw/eeg")
-PROCESSED_PATH = Path("data/processed/eeg")
+PROJECT_ROOT = Path(__file__).resolve().parents[1]
+RAW_PATH = PROJECT_ROOT / "data/raw/eeg"
+PROCESSED_PATH = PROJECT_ROOT / "data/processed/eeg"
 
 # small std = small variance = dead EEG channel, set threshold req
 FLAT_STD = 1e-10
 
 
-def _decode(name):
-    # bytes to str else keep str 
-    return name.decode() if isinstance(name, bytes) else str(name) 
-    # TODO: check if None should convert to str or keep, i.e. keep str cast?
+def _decode(name: bytes | str) -> str:
+    """Normalize HDF5 byte and string metadata to Python strings."""
+    return name.decode() if isinstance(name, bytes) else str(name)
 
 
-def inventory(path):
-    # inspect and return dict of key metrics for each subject
-    rows = []
+def inventory(path: Path) -> list[dict[str, Any]]:
+    """Collect recording metadata and basic quality metrics for one HDF5 file."""
+    rows: list[dict[str, Any]] = []
 
     with h5py.File(path, "r") as file: # autoclose fyi
         channels = [_decode(channel) for channel in file["ch_names"][:]] # decode each channel name
@@ -43,6 +44,11 @@ def inventory(path):
                 if not orientation_state and x.shape[1] == len(channels):
                     x = x.T # transpose
                     orientation_state = True
+                if not orientation_state:
+                    raise ValueError(
+                        f"{path}: {condition}/{part} shape {x.shape} does not match "
+                        f"{len(channels)} channel names"
+                    )
 
                 std = x.std(axis=1, ddof=1) # calc sample std of every channel across time
                 # how strongly each row's average stands out relative to row variation
@@ -67,7 +73,7 @@ def inventory(path):
     return rows
                  
 
-def main():
+def main() -> None:
     all_raw_files = RAW_PATH.iterdir()
 
     # keep only files starting with P and has .h5 extension

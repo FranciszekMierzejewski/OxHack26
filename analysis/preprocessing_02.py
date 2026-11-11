@@ -1,4 +1,5 @@
 from pathlib import Path
+from typing import TypeAlias
 
 import h5py
 import numpy as np
@@ -6,7 +7,10 @@ import pandas as pd
 from scipy.integrate import trapezoid
 from scipy.signal import butter, iirnotch, sosfilt, sosfilt_zi, tf2sos, welch
 
-from explore_eeg_01 import RAW_PATH, PROCESSED_PATH
+WindowFeatures: TypeAlias = tuple[float, np.ndarray]
+PROJECT_ROOT = Path(__file__).resolve().parents[1]
+RAW_PATH = PROJECT_ROOT / "data/raw/eeg"
+PROCESSED_PATH = PROJECT_ROOT / "data/processed/eeg"
 
 FS_IN, DECIMATE = 1000, 4 # 1000 samples per s, keeping 4th sample
 FS = FS_IN // DECIMATE   # 250 Hz after decimation
@@ -22,25 +26,24 @@ BANDS = {"delta": (1, 4), "theta": (4, 8), "alpha": (8, 13), "beta": (13, 30)} #
 CHANNELS_KEPT = None # since dataset has 63 channels, custom to your headset
 
 
-def build_filter():
-    """
-    Combined digital filter that passes freq band, removes interfering frequency
-    returns coeff. as second order sections array
-    """
+def build_filter() -> np.ndarray:
+    """Build the band-pass and mains-notch filter as second-order sections."""
     bandpass = butter(4, BAND_HZ, btype = "bandpass", fs = FS_IN, output = "sos")
     notch = tf2sos(*iirnotch(NOTCH_HZ, Q=30, fs=FS_IN)) # surpress mains at band mains with sharpness 30
  
     return np.vstack([bandpass, notch]) # vstack both matrices
 
 
-def filter_causal(x, sos):
-    # x: (channels, samples). Initialise state for a constant input equal to x[:, 0].
+def filter_causal(x: np.ndarray, sos: np.ndarray) -> np.ndarray:
+    """Filter channels-by-samples data while initializing state from each channel."""
+    if x.ndim != 2 or x.shape[1] == 0:
+        raise ValueError("EEG data must be a non-empty channels-by-samples array")
     zi = sosfilt_zi(sos)[:, None, :] * x[None, :, :1]
     y, _ = sosfilt(sos, x, axis=1, zi=zi)
     return y  # i.e. return filtered version of each channel
 
-def band_power(window):
-    # window: (channels, samples) at frequency sampling. Returns (n_bands, channels) of log10 power.
+def band_power(window: np.ndarray) -> np.ndarray:
+    """Return log10 band power for each frequency band and EEG channel."""
     freqs, psd = welch(window, fs=FS, nperseg=2 * FS, noverlap=FS, axis=1,
                        detrend="constant")
     out = []
@@ -50,22 +53,27 @@ def band_power(window):
     return np.log10(np.asarray(out) + 1e-30)
 
 
-def process_part(x, sos):
-    # filter at the original rate, THEN decimate (the 30 Hz low-pass is the anti-alias filter)
+def process_part(x: np.ndarray, sos: np.ndarray) -> tuple[list[WindowFeatures], int]:
+    """Filter one channels-by-samples recording and extract artifact-screened windows."""
     y = filter_causal(x, sos)[:, ::DECIMATE]
  
     size, hop, start0 = WINDOW_S * FS, HOP_S * FS, SETTLE_S * FS
     kept, n_rejected = [], 0
     for start in range(start0, y.shape[1] - size + 1, hop):
         window = y[:, start:start + size]
-        ptp = window.max(axis=1) - window.min(axis=1)
-        if (ptp > REJECT_V).mean() > MAX_BAD_FRACTION:
+        finite_channels = np.all(np.isfinite(window), axis=1)
+        bad_channels = np.ones(window.shape[0], dtype=bool)
+        if np.any(finite_channels):
+            finite_window = window[finite_channels]
+            ptp = finite_window.max(axis=1) - finite_window.min(axis=1)
+            bad_channels[finite_channels] = ptp > REJECT_V
+        if not finite_channels.all() or bad_channels.mean() > MAX_BAD_FRACTION:
             n_rejected += 1
             continue
         kept.append((start / FS, band_power(window)))
     return kept, n_rejected
 
-def main():
+def main() -> None:
     PROCESSED_PATH.mkdir(parents=True, exist_ok=True)
     files = sorted(p for p in RAW_PATH.iterdir()
                    if p.is_file() and p.suffix == ".h5" and p.name.startswith("P"))
@@ -91,7 +99,16 @@ def main():
  
             for condition in [k for k in f.keys() if isinstance(f[k], h5py.Group)]:
                 for part in sorted(f[condition].keys(), key=lambda s: int(s.split("_")[1])):
-                    x = f[condition][part][:].astype(np.float64)[keep]
+                    x = f[condition][part][:].astype(np.float64)
+                    if x.shape[0] != len(channels):
+                        if x.shape[1] == len(channels):
+                            x = x.T
+                        else:
+                            raise ValueError(
+                                f"{path.name}: {condition}/{part} shape {x.shape} "
+                                f"does not match {len(channels)} channel names"
+                            )
+                    x = x[keep]
                     windows, n_rej = process_part(x, sos)
                     summary.append({"participant": path.stem, "condition": condition,
                                     "part": part, "windows_kept": len(windows),

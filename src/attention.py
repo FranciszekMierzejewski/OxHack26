@@ -5,9 +5,13 @@ listener's own calibration baseline. It is a published heuristic, not a model
 trained on attention labels, so treat it as a relative signal for one listener.
 """
 import math
+from collections.abc import Sequence
 
 import numpy as np
+from numpy.typing import NDArray
 from scipy.signal import detrend, welch
+
+FloatArray = NDArray[np.float64]
 
 THETA = (4.0, 8.0)
 ALPHA = (8.0, 13.0)
@@ -18,24 +22,28 @@ BETA = (13.0, 30.0)
 PREFERRED_CHANNELS = ("Cz", "Pz", "P3", "P4")
 
 
-def pick_channels(names):
-    """Return indices of the preferred channels, or all channels if none match."""
+def pick_channels(names: Sequence[str]) -> list[int]:
+    """Return preferred electrode indices, falling back to all available channels."""
     wanted = {name.lower() for name in PREFERRED_CHANNELS}
     picked = [i for i, name in enumerate(names) if name.strip().lower() in wanted]
     return picked or list(range(len(names)))
 
 
-def _band_power(freqs, psd, band):
+def _band_power(freqs: FloatArray, psd: FloatArray, band: tuple[float, float]) -> FloatArray:
+    """Sum power spectral density over a half-open frequency band."""
     mask = (freqs >= band[0]) & (freqs < band[1])
     return psd[:, mask].sum(axis=1)
 
 
-def extract_features(window, fs):
+def extract_features(window: FloatArray, fs: float) -> tuple[float, float] | None:
     """Return (log engagement index, peak-to-peak size), or None if unusable.
 
     window has shape (channels, samples). Welch's linear detrend removes the
     large DC offset and slow drift seen in the recordings.
     """
+    if window.ndim != 2 or window.shape[1] < 2 or fs <= 0:
+        return None
+
     usable = np.all(np.isfinite(window), axis=1) & (np.ptp(window, axis=1) > 0)
     x = window[usable]
     if x.shape[0] == 0:
@@ -59,14 +67,17 @@ class AttentionTracker:
     MIN_SCALE = 0.05  # stops a very quiet baseline from exaggerating z-scores
     ARTIFACT_RATIO = 4.0  # reject windows this many times the normal amplitude
 
-    def __init__(self, fs, calibration_s=30.0, step_s=1.0, smoothing_s=5.0):
+    def __init__(self, fs: float, calibration_s: float = 30.0, step_s: float = 1.0,
+                 smoothing_s: float = 5.0) -> None:
+        if fs <= 0 or calibration_s <= 0 or step_s <= 0 or smoothing_s <= 0:
+            raise ValueError("sampling rate and durations must be positive")
         self.fs = fs
         self.step_s = step_s
         self.calibration_windows = max(5, round(calibration_s / step_s))
         self.smoothing = 1.0 - math.exp(-step_s / smoothing_s)
         self.reset()
 
-    def reset(self):
+    def reset(self) -> None:
         self._log_indices = []
         self._peak_to_peaks = []
         self.median = None
@@ -75,23 +86,25 @@ class AttentionTracker:
         self.z = None
 
     @property
-    def calibrated(self):
+    def calibrated(self) -> bool:
         return self.median is not None
 
     @property
-    def progress(self):
+    def progress(self) -> float:
         if self.calibrated:
             return 1.0
         return len(self._log_indices) / self.calibration_windows
 
     @property
-    def attention(self):
+    def attention(self) -> float | None:
         if self.z is None:
             return None
-        return 1.0 / (1.0 + math.exp(-self.z))
+        # Clamp extreme scores to avoid overflow while preserving sigmoid behavior.
+        z = max(-60.0, min(60.0, self.z))
+        return 1.0 / (1.0 + math.exp(-z))
 
-    def update(self, window):
-        """Process one window. Returns True if it was rejected as an artifact."""
+    def update(self, window: FloatArray) -> bool:
+        """Process a channels-by-samples window; return whether it was rejected."""
         features = extract_features(window, self.fs)
         if features is None:
             return True
@@ -104,14 +117,15 @@ class AttentionTracker:
                 self._finish_calibration()
             return False
 
-        if peak_to_peak > self.peak_limit:
+        if self.peak_limit is not None and peak_to_peak > self.peak_limit:
             return True
 
+        assert self.median is not None and self.scale is not None
         z = (log_index - self.median) / self.scale
         self.z = z if self.z is None else self.z + self.smoothing * (z - self.z)
         return False
 
-    def _finish_calibration(self):
+    def _finish_calibration(self) -> None:
         values = np.asarray(self._log_indices)
         self.median = float(np.median(values))
         mad = float(np.median(np.abs(values - self.median)))
@@ -127,26 +141,29 @@ class SpeedPolicy:
     MARGIN = 0.04  # attention must clear the threshold by this much to speed up
     DWELL_S = 4.0  # a change must be wanted for this long before it happens
 
-    def __init__(self):
+    def __init__(self) -> None:
         self.reset()
 
-    def reset(self):
+    def reset(self) -> None:
         self.level = 0
         self._pending = 0
         self._held_s = 0.0
 
     @property
-    def factor(self):
+    def factor(self) -> float:
         return self.FACTORS[self.level]
 
-    def _wanted_direction(self, attention):
+    def _wanted_direction(self, attention: float) -> int:
         if self.level < len(self.THRESHOLDS) and attention < self.THRESHOLDS[self.level]:
             return 1
         if self.level > 0 and attention >= self.THRESHOLDS[self.level - 1] + self.MARGIN:
             return -1
         return 0
 
-    def update(self, attention, dt):
+    def update(self, attention: float, dt: float) -> float:
+        """Update the speed level, requiring a stable preference for the dwell time."""
+        if not 0.0 <= attention <= 1.0 or dt < 0:
+            raise ValueError("attention must be in [0, 1] and dt must be non-negative")
         direction = self._wanted_direction(attention)
         if direction == 0 or direction != self._pending:
             self._pending = direction

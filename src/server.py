@@ -1,21 +1,21 @@
-"""NeuroTune attention service, read by the Chrome side panel.
+"""NeuroTune attention service for the Chrome side panel.
 
-Run from the repository root, using one of:
-    python backend/server.py --source sim
-    python backend/server.py --source replay --file data/raw/eeg/P00.h5
-    python backend/server.py --source lsl
+Run from the repository root with ``python -m src.server --source sim``.
+Supported sources are ``sim``, ``replay``, and ``lsl``.
 """
 import argparse
 import threading
 import time
+from collections.abc import Callable
 from contextlib import asynccontextmanager
+from typing import Any
 
 import numpy as np
 import uvicorn
 from fastapi import FastAPI, HTTPException, Request
 
-from attention import AttentionTracker, SpeedPolicy, pick_channels
-from eeg_sources import H5ReplaySource, LSLSource, SimulatedSource
+from src.attention import AttentionTracker, SpeedPolicy, pick_channels
+from src.eeg_sources import EEGSource, H5ReplaySource, LSLSource, SimulatedSource
 
 WINDOW_S = 2.0
 STEP_S = 1.0
@@ -24,9 +24,10 @@ RETRY_S = 2.0
 
 
 class Engine(threading.Thread):
-    """Read EEG in the background and keep the latest result."""
+    """Read EEG in the background and keep the latest result available."""
 
-    def __init__(self, make_source, source_name, calibration_s):
+    def __init__(self, make_source: Callable[[], EEGSource], source_name: str,
+                 calibration_s: float) -> None:
         super().__init__(daemon=True)
         self.make_source = make_source
         self.source_name = source_name
@@ -34,22 +35,30 @@ class Engine(threading.Thread):
         self.lock = threading.Lock()
         self.recalibrate_requested = threading.Event()
         self.stop_requested = threading.Event()
-        self.error = None
+        self.error: str | None = None
         self.last_data = 0.0
-        self.result = {"calibration_progress": 0.0, "attention": None,
-                       "speed_factor": 1.0, "artifact": False, "calibrated": False}
+        self.result: dict[str, Any] = {
+            "calibration_progress": 0.0,
+            "attention": None,
+            "speed_factor": 1.0,
+            "artifact": False,
+            "calibrated": False,
+        }
 
-    def run(self):
+    def run(self) -> None:
         while not self.stop_requested.is_set():
             try:
                 self._stream(self.make_source())
-            except Exception as exception:  # e.g. the headset is not on yet
+            except Exception as exception:  # The headset or stream may not be ready yet.
                 self.error = str(exception)
                 self.stop_requested.wait(RETRY_S)
 
-    def _stream(self, source):
+    def _stream(self, source: EEGSource) -> None:
         self.error = None
         channels = pick_channels(source.channel_names)
+        if not channels:
+            raise ValueError("The EEG source has no channels")
+
         window_samples = int(WINDOW_S * source.fs)
         step_samples = int(STEP_S * source.fs)
         tracker = AttentionTracker(source.fs, self.calibration_s, STEP_S)
@@ -81,7 +90,8 @@ class Engine(threading.Thread):
                 policy.update(tracker.attention, STEP_S)
             self._publish(tracker, policy, artifact)
 
-    def _publish(self, tracker, policy, artifact):
+    def _publish(self, tracker: AttentionTracker, policy: SpeedPolicy,
+                 artifact: bool) -> None:
         with self.lock:
             self.result = {
                 "calibration_progress": round(tracker.progress, 3),
@@ -91,7 +101,8 @@ class Engine(threading.Thread):
                 "calibrated": tracker.calibrated,
             }
 
-    def state(self):
+    def state(self) -> dict[str, Any]:
+        """Return the latest score and a status derived from signal freshness."""
         with self.lock:
             result = dict(self.result)
             fresh = time.monotonic() - self.last_data < STALE_AFTER_S
@@ -112,9 +123,10 @@ class Engine(threading.Thread):
                 "calibration_remaining_s": round(remaining), "error": self.error}
 
 
-def create_app(engine):
+def create_app(engine: Engine) -> FastAPI:
+    """Create the local API and manage the EEG worker with application lifespan."""
     @asynccontextmanager
-    async def lifespan(_app):
+    async def lifespan(_app: FastAPI):
         engine.start()
         yield
         engine.stop_requested.set()
@@ -122,11 +134,11 @@ def create_app(engine):
     app = FastAPI(title="NeuroTune", lifespan=lifespan)
 
     @app.get("/state")
-    def state():
+    def state() -> dict[str, Any]:
         return engine.state()
 
     @app.post("/calibrate")
-    def calibrate(request: Request):
+    def calibrate(request: Request) -> dict[str, bool]:
         # Web pages can send requests to localhost, so accept only the extension.
         origin = request.headers.get("origin")
         if origin and not origin.startswith("chrome-extension://"):
@@ -137,7 +149,8 @@ def create_app(engine):
     return app
 
 
-def main():
+def main() -> None:
+    """Parse command-line options and start the local attention service."""
     parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawTextHelpFormatter)
     parser.add_argument("--source", choices=("sim", "replay", "lsl"), default="sim")
     parser.add_argument("--file", help="recording to replay, e.g. data/raw/eeg/P00.h5")
@@ -150,7 +163,7 @@ def main():
     if args.source == "replay" and not args.file:
         parser.error("--source replay needs --file")
 
-    makers = {
+    makers: dict[str, Callable[[], EEGSource]] = {
         "sim": lambda: SimulatedSource(calibration_s=args.calibration),
         "replay": lambda: H5ReplaySource(args.file, args.condition, args.part),
         "lsl": LSLSource,
